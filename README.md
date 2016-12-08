@@ -15,8 +15,8 @@ $ npm install --save passport @aoberoi/passport-slack
 ### Create a Slack App
 
 Before using this package, you must create a [Slack App](https://api.slack.com/slack-apps). You
-will be issued a Client ID and Client Secret, which need to be provided to the strategy. You will
-also need to configure a Redirect URL which matches a route in your node HTTP server.
+will be issued a **Client ID** and **Client Secret**, which need to be provided to the strategy.
+You will also need to configure a **Redirect URL** which matches a route in your node HTTP server.
 
 ### Configure Strategy
 
