@@ -51,7 +51,7 @@ For example, as route middleware in an Express application:
 // and ask the user to authorize your application for the default scope (`identity.basic`).
 app.get('/auth/slack', passport.authenticate('slack'));
 
-// The user returns to the your site after the authorization above, and if it was successful they
+// The user returns to the your site after the authorization above, and if it was successful
 // the next route handler runs, otherwise the user is redirected to chosen failureRedirect.
 app.get('/auth/slack/callback',
   passport.authenticate('slack', { failureRedirect: '/login' }),
@@ -61,8 +61,8 @@ app.get('/auth/slack/callback',
   });
 ```
 
-Instead of the default scope (`identity.basic` - the least privileged scope to choose for Sign In
-with Slack), you can specify your own as options for `passport.authenticate()`.
+Instead of the default scope (`identity.basic` - the least privileged scope for Sign In with Slack),
+you can specify your own as options for `passport.authenticate()`.
 
 ```javascript
 // Sign In with Slack with multiple scopes for increased authorization. The user and team profiles
