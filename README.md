@@ -78,9 +78,19 @@ app.get('/auth/slack', passport.authenticate('slack', {
 }));
 ```
 
+If your application is already aware of a Slack Team ID that you intend the user to authenticate
+in, you can specify this ahead of time and save the user from having to select from all Slack Teams
+they may already be signed into.
+
+```javascript
+app.get('/auth/slack', passport.authenticate('slack', {
+  team: SLACK_TEAM_ID,
+}));
+```
+
 ## Examples
 
-**TODO**
+See the [`example` directory](example) for a simple Sign in With Slack server.
 
 ## FAQ
 

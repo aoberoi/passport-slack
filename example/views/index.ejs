@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Slack Authentication using Passport - Sign in With Slack Example</title>
+  </head>
+  <body>
+
+    <% if (user) { %>
+
+      <p>You are logged in as <%= user.name %> (<%= user.id %>)</p>
+      <form method="POST" action="/logout">
+        <input type="submit" value="Logout" />
+      </form>
+
+    <% } else { %>
+
+      <a href="/auth/slack">Sign in with Slack</a>
+
+    <% } %>
+
+  </body>
+</html>

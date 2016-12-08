@@ -1,0 +1,21 @@
+{
+  "name": "@aoberoi/passport-slack-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example app for @aoberoi/passport-slack",
+  "main": "server.js",
+  "engines": {
+    "node": ">=6.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ankur Oberoi <aoberoi@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "ejs": "^2.5.5",
+    "express": "^4.14.0",
+    "express-session": "^1.14.2",
+    "passport": "^0.3.2"
+  }
+}
