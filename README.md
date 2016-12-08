@@ -84,12 +84,11 @@ app.get('/auth/slack', passport.authenticate('slack', {
 
 ## FAQ
 
-1. How do I ask a user for additional permissions?
+##### How do I ask a user for additional permissions?
 
 **TODO**
 
-2. How is this module different from
-[the existing passport-slack](https://github.com/mjpearson/passport-slack)?
+##### How is this module different from [the existing passport-slack](https://github.com/mjpearson/passport-slack)?
 
   The existing module is a great start on adapting Slack workflows for OAuth. On closer look, I
   realized that the way Slack does OAuth is a little different from most providers. For example,
