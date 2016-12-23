@@ -27,7 +27,7 @@ function wrapVerify(slackAuthOptions) {
     if (params.bot) {
       extra.bot = {
         id: params.bot.bot_user_id,
-        accessToken: params.bot.access_token,
+        accessToken: params.bot.bot_access_token,
       };
     }
     if (params.incoming_webhook) {
