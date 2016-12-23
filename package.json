@@ -1,6 +1,6 @@
 {
   "name": "@aoberoi/passport-slack",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Slack authentication strategy for Passport",
   "main": "dist/index.js",
   "repository": "https://github.com/aoberoi/passport-slack.git",
