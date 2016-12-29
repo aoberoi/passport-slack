@@ -19,9 +19,9 @@ import needle from 'needle';
 function wrapVerify(slackAuthOptions) {
   return function _verify(req, accessToken, refreshToken, params, profile, verified) {
     const team = {
-      id: params.team_id,
+      id: params.team_id || (params.team && params.team.id),
     };
-    if (params.team_name) team.name = params.team_name;
+    if (params.team_name) team.name = params.team_name || (params.team && params.team.name);
     const scopes = new Set(params.scope.split(','));
     const extra = {};
     if (params.bot) {
