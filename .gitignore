@@ -3,3 +3,4 @@ dist
 doc
 *.log
 *.tgz
+package-lock.json
