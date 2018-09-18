@@ -158,18 +158,21 @@ export interface SlackStrategyVerificationInfo {
   // raw `oauth.access` response
 }
 
-// TODO: is there a way to parameterize this type on which properties are present when certain options are set?
-// for example, when `passReqToCallback` is false (default), the `req` parameter is not user. and when `skipUserProfile`
-// is true, certain fields in SlackStrategyVerificationInfo will certainly not be set (while other still might be or
-// will be). some conditions can't be known through syntax alone, since the scope(s) used by the app determine some
-// of the availabilities. also, think about conditional types
 /**
  * The callback that asynchronously produces the value to be stored on `req.user`, `req.account`, or the customized
  * `options.assignProperty`.
  */
 export interface SlackStrategyVerifyCallback {
-  (req: IncomingMessage, info: SlackStrategyVerificationInfo, done: (err: Error, user: any) => void): void;
-  (info: SlackStrategyVerificationInfo, done: (err: Error, user: any) => void): void;
+  (info: SlackStrategyVerificationInfo, done: (err: Error | null | undefined, user: any) => void): void;
+}
+
+/**
+ * The callback that asynchronously produces the value to be stored on `req.user`, `req.account`, or the customized
+ * `options.assignProperty`. This form is used when the `passReqToCallback` option is true.
+ */
+export interface SlackStrategyVerifyCallbackWithRequest {
+  (req: IncomingMessage,
+   info: SlackStrategyVerificationInfo, done: (err: Error | null | undefined, user: any) => void): void;
 }
 
 // TODO: there are versions of each of these methods that take an extra `meta` parameter
@@ -189,7 +192,7 @@ export interface Store {
  * This strategy is suitable for implementing the 'Add to Slack' and the 'Sign in with Slack'
  * buttons in your application.
  */
-export class SlackStrategy extends OAuth2Strategy {
+export default class SlackStrategy extends OAuth2Strategy {
 
   private slack: {
     profileURL: string;
@@ -199,7 +202,12 @@ export class SlackStrategy extends OAuth2Strategy {
   /**
    * Creates an instance of the SlackStrategy
    */
-  constructor(options: SlackStrategyOptions, verify: SlackStrategyVerifyCallback) {
+  constructor(
+    options: SlackStrategyOptions,
+    // TODO: parameterize this on whehter passReqToCallback is true
+    // TODO: parameterize `info` on the value of skipUserProfile
+    verify: SlackStrategyVerifyCallback | SlackStrategyVerifyCallbackWithRequest,
+  ) {
     if (!options.clientSecret) { throw new TypeError('SlackStrategy requires a clientSecret option'); }
 
     // Resolve options by merging in the defaults
@@ -283,7 +291,7 @@ export class SlackStrategy extends OAuth2Strategy {
  * Adapts the verify callback that the super class expects to the verify callback API this strategy presents to the user
  */
 function wrapVerify(
-    verify: SlackStrategyVerifyCallback,
+    verify: SlackStrategyVerifyCallback | SlackStrategyVerifyCallbackWithRequest,
     passReqToCallback: boolean,
   ): OAuth2Strategy.VerifyFunctionWithRequest {
   return function _verify(
@@ -352,9 +360,11 @@ function wrapVerify(
 
     // Invoke the verify callback using the preference for having the req passed or not
     if (!passReqToCallback) {
-      verify(info, verified);
+      const verifyWithoutReq: SlackStrategyVerifyCallback = verify as SlackStrategyVerifyCallback;
+      verifyWithoutReq(info, verified);
     } else {
-      verify(req, info, verified);
+      const verifyWithReq: SlackStrategyVerifyCallbackWithRequest = verify as SlackStrategyVerifyCallbackWithRequest;
+      verifyWithReq(req, info, verified);
     }
   };
 }
