@@ -5,6 +5,8 @@ import needle from 'needle';
 import objectEntries from 'object.entries';
 
 // TODO: get some debug logging in here
+// TODO: make lint and build part of the publish process
+// TODO: remove docs directory
 
 /**
  * Options object used to initialize SlackStrategy.
@@ -43,17 +45,13 @@ export interface SlackStrategyOptions {
    * Whether or not to retreive a response from the `users.identity` Slack API method before invoking the verify
    * callback. Defaults to `false`.
    */
-  skipUserProfile?: boolean;
+  skipUserProfile?: boolean |
+    ((accessToken: string, callback: (err: Error | null | undefined, skip: boolean) => void) => void);
 
   /**
    * A dictionary of HTTP header names and values to be used in all requests made to the Slack API from this Strategy.
    */
   customHeaders?: OutgoingHttpHeaders;
-
-  /**
-   * The name for this strategy within passport. Defaults to `slack`.
-   */
-  name?: string;
 
   /**
    * Whether or not the `verify` callback should be called with the incoming HTTP request as its first argument.
@@ -216,7 +214,6 @@ export default class SlackStrategy extends OAuth2Strategy {
       tokenURL: 'https://slack.com/api/oauth.access',
       authorizationURL: 'https://slack.com/oauth/authorize',
       profileURL: 'https://slack.com/api/users.identity',
-      name: 'slack',
 
       // Apply a default since the wrapVerify behavior depends on resolving this option
       passReqToCallback: false,
@@ -245,13 +242,13 @@ export default class SlackStrategy extends OAuth2Strategy {
       throw new TypeError('SlackStrategy cannot retrieve user profiles without \'identity.basic\' scope');
     }
 
-    const overrideOptions: { passReqToCallback: true } =  { passReqToCallback: true };
+    const overrideOptions: { passReqToCallback: true } = { passReqToCallback: true };
     super(
       Object.assign({}, resolvedOptions, overrideOptions),
-      wrapVerify(verify, resolvedOptions.passReqToCallback),
+      wrapVerify(verify, resolvedOptions.passReqToCallback, resolvedOptions.skipUserProfile),
     );
 
-    this.name = resolvedOptions.name;
+    this.name = 'slack';
     this.slack = {
       profileURL: resolvedOptions.profileURL,
       team: resolvedOptions.team,
@@ -261,16 +258,20 @@ export default class SlackStrategy extends OAuth2Strategy {
   /**
    * Retrieve user and team profile from Slack
    */
-  public userProfile(accessToken: string, done: (err?: Error | null, profile?: UsersIdentityResponse) => void): void {
-    needle.request('get', this.slack.profileURL, { token: accessToken }, (error, _res, body: UsersIdentityResponse) => {
-      if (error) {
-        done(error);
-      } else if (!body.ok) {
-        done(new Error(body.error));
-      } else {
+  public userProfile(accessToken: any, done: (err?: Error | null, profile?: UsersIdentityResponse) => void): void {
+    needle('get', this.slack.profileURL, { token: accessToken })
+      .then(({ body }) => {
+        if (!body.ok) {
+          // Check for an error related to the X-Slack-User header missing
+          if (body.error === 'user_not_specified') {
+            done(null, undefined);
+          } else {
+            throw new Error(body.error);
+          }
+        }
         done(null, body);
-      }
-    });
+      })
+      .catch(done);
   }
 
   /**
@@ -294,6 +295,7 @@ export default class SlackStrategy extends OAuth2Strategy {
 function wrapVerify(
     verify: SlackStrategyVerifyCallback | SlackStrategyVerifyCallbackWithRequest,
     passReqToCallback: boolean,
+    _skipUserProfile: SlackStrategyOptions['skipUserProfile'],
   ): OAuth2Strategy.VerifyFunctionWithRequest {
   return function _verify(
     req: Request,
@@ -303,6 +305,9 @@ function wrapVerify(
     profile: UsersIdentityResponse,
     verified: VerifyCallback,
   ): void {
+    // TODO: If the profile is undefined, but the skipUserProfile option says there should be a profile, it may have
+    // been skipped because there was no user ID available to use for the X-Slack-User header. We can attempt to
+    // retrieve it now.
     const info: SlackStrategyVerificationInfo = {
       access_token: accessToken,
       refresh_token: refreshToken, // will be undefined when expiration is not turned on
