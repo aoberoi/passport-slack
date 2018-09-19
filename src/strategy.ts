@@ -251,6 +251,7 @@ export default class SlackStrategy extends OAuth2Strategy {
       wrapVerify(verify, resolvedOptions.passReqToCallback),
     );
 
+    this.name = resolvedOptions.name;
     this.slack = {
       profileURL: resolvedOptions.profileURL,
       team: resolvedOptions.team,
