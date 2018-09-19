@@ -1,7 +1,8 @@
-import { Request } from 'express'; // tslint:disable-line:no-implicit-dependencies
 import { OutgoingHttpHeaders, IncomingMessage } from 'http';
+import { get } from 'https';
+import { stringify as qsStringify } from 'querystring';
+import { Request } from 'express'; // tslint:disable-line:no-implicit-dependencies
 import OAuth2Strategy, { VerifyCallback } from 'passport-oauth2'; // tslint:disable-line:import-name
-import needle from 'needle';
 import objectEntries from 'object.entries';
 
 // TODO: get some debug logging in here
@@ -259,19 +260,44 @@ export default class SlackStrategy extends OAuth2Strategy {
    * Retrieve user and team profile from Slack
    */
   public userProfile(accessToken: any, done: (err?: Error | null, profile?: UsersIdentityResponse) => void): void {
-    needle('get', this.slack.profileURL, { token: accessToken })
-      .then(({ body }) => {
+    let handled = false;
+    const handle = (error: Error | null, profile?: UsersIdentityResponse) => {
+      if (!handled) {
+        handled = true;
+        done(error, profile);
+      }
+    };
+
+    const req = get(`${this.slack.profileURL}?${qsStringify({ token: accessToken })}`, (res: IncomingMessage) => {
+      let body: any = '';
+
+      if (res.statusCode !== 200) {
+        handle(new Error(res.statusMessage));
+      }
+
+      res.setEncoding('utf8');
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          body = JSON.parse(body);
+        } catch (error) {
+          handle(error);
+        }
+
         if (!body.ok) {
           // Check for an error related to the X-Slack-User header missing
           if (body.error === 'user_not_specified') {
-            done(null, undefined);
+            handle(null, undefined);
           } else {
-            throw new Error(body.error);
+            handle(new Error(body.error));
           }
         }
-        done(null, body);
-      })
-      .catch(done);
+
+        handle(null, body);
+      });
+      res.on('error', handle);
+    });
+    req.on('error', handle);
   }
 
   /**
