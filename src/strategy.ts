@@ -246,7 +246,9 @@ export default class SlackStrategy extends OAuth2Strategy {
     const overrideOptions: { passReqToCallback: true } = { passReqToCallback: true };
     super(
       Object.assign({}, resolvedOptions, overrideOptions),
-      wrapVerify(verify, resolvedOptions.passReqToCallback, resolvedOptions.skipUserProfile),
+      wrapVerify(
+        verify, resolvedOptions.passReqToCallback, resolvedOptions.skipUserProfile, resolvedOptions.profileURL,
+      ),
     );
 
     this.name = 'slack';
@@ -260,44 +262,16 @@ export default class SlackStrategy extends OAuth2Strategy {
    * Retrieve user and team profile from Slack
    */
   public userProfile(accessToken: any, done: (err?: Error | null, profile?: UsersIdentityResponse) => void): void {
-    let handled = false;
-    const handle = (error: Error | null, profile?: UsersIdentityResponse) => {
-      if (!handled) {
-        handled = true;
-        done(error, profile);
-      }
-    };
-
-    const req = get(`${this.slack.profileURL}?${qsStringify({ token: accessToken })}`, (res: IncomingMessage) => {
-      let body: any = '';
-
-      if (res.statusCode !== 200) {
-        handle(new Error(res.statusMessage));
-      }
-
-      res.setEncoding('utf8');
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          body = JSON.parse(body);
-        } catch (error) {
-          handle(error);
+    slackGet(this.slack.profileURL, { token: accessToken })
+      .then(data => done(null, data))
+      .catch((error) => {
+        // Check for an error related to the X-Slack-User header missing
+        if (error.message === 'user_not_specified') {
+          done(null, undefined);
+          return;
         }
-
-        if (!body.ok) {
-          // Check for an error related to the X-Slack-User header missing
-          if (body.error === 'user_not_specified') {
-            handle(null, undefined);
-          } else {
-            handle(new Error(body.error));
-          }
-        }
-
-        handle(null, body);
+        done(error);
       });
-      res.on('error', handle);
-    });
-    req.on('error', handle);
   }
 
   /**
@@ -321,84 +295,136 @@ export default class SlackStrategy extends OAuth2Strategy {
 function wrapVerify(
     verify: SlackStrategyVerifyCallback | SlackStrategyVerifyCallbackWithRequest,
     passReqToCallback: boolean,
-    _skipUserProfile: SlackStrategyOptions['skipUserProfile'],
+    skipUserProfile: boolean |
+      ((accessToken: string, callback: (err: Error | null | undefined, skip: boolean) => void) => void),
+    profileURL: string,
   ): OAuth2Strategy.VerifyFunctionWithRequest {
   return function _verify(
     req: Request,
     accessToken: string,
     refreshToken: string | undefined,
     results: any, // TODO: define some types for the oauth.access response shapes
-    profile: UsersIdentityResponse,
+    profile: UsersIdentityResponse | undefined,
     verified: VerifyCallback,
   ): void {
-    // TODO: If the profile is undefined, but the skipUserProfile option says there should be a profile, it may have
-    // been skipped because there was no user ID available to use for the X-Slack-User header. We can attempt to
-    // retrieve it now.
-    const info: SlackStrategyVerificationInfo = {
-      access_token: accessToken,
-      refresh_token: refreshToken, // will be undefined when expiration is not turned on
-      user: {
-        // will be undefined for user-token apps that don't fetch the profile
-        id: results.installer_user ? results.installer_user.user_id : (profile && profile.user && profile.user.id),
-        name: profile !== undefined && profile.user !== undefined ? profile.user.id : undefined,
-      },
-      team: {
-        id: results.team_id || (results.team && results.team.id),
-        name: results.team_name || (results.team && results.team.name), // might be undefined
-      },
-      scopes: [],
-    };
 
-    // Copy all user profile properties into the user
-    if (profile !== undefined && profile.user !== undefined) {
-      for (const [key, val] of objectEntries(profile.user)) {
-        if (info.user[key] === undefined) {
-          info.user[key] = val;
+    const skipProfilePromise: Promise<boolean> = new Promise((resolve, reject) => {
+      if (typeof skipUserProfile !== 'function') {
+        resolve(skipUserProfile);
+        return;
+      }
+      skipUserProfile(accessToken, (error, skip) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(skip);
+      });
+    });
+    skipProfilePromise.then((skip: boolean) => {
+      if (!skip && profile !== undefined) {
+        return slackGet(profileURL, { token: accessToken }, {
+          'X-Slack-User': results.installer_user && results.installer_user.user_id,
+        });
+      }
+      return profile;
+    }).then((profile: UsersIdentityResponse | undefined) => {
+      const info: SlackStrategyVerificationInfo = {
+        access_token: accessToken,
+        refresh_token: refreshToken, // will be undefined when expiration is not turned on
+        user: {
+          // will be undefined for user-token apps that don't fetch the profile
+          id: results.installer_user ? results.installer_user.user_id : (profile && profile.user && profile.user.id),
+          name: profile !== undefined && profile.user !== undefined ? profile.user.id : undefined,
+        },
+        team: {
+          id: results.team_id || (results.team && results.team.id),
+          name: results.team_name || (results.team && results.team.name), // might be undefined
+        },
+        scopes: [],
+      };
+
+      // Copy all user profile properties into the user
+      if (profile !== undefined && profile.user !== undefined) {
+        for (const [key, val] of objectEntries(profile.user)) {
+          if (info.user[key] === undefined) {
+            info.user[key] = val;
+          }
         }
       }
-    }
 
-    // Build scopes info
-    if (results.current_grant) {
-      // in workspace apps, a structured object is returned for scopes
-      info.scopes = results.current_grant.permissions.reduce(
-        (scopes: string[], permission: { scopes: string[] }) => (scopes.concat(permission.scopes)),
-        info.scopes,
-      );
-    } else if (results.scope && typeof results.scope === 'string') {
-      // in all other apps an array is returned, by splitting a string on the comma separator
-      info.scopes = results.scope.split(',');
-    } else {
-      // TODO: log a warning
-    }
+      // Build scopes info
+      if (results.current_grant) {
+        // in workspace apps, a structured object is returned for scopes
+        info.scopes = results.current_grant.permissions.reduce(
+          (scopes: string[], permission: { scopes: string[] }) => (scopes.concat(permission.scopes)),
+          info.scopes,
+        );
+      } else if (results.scope && typeof results.scope === 'string') {
+        // in all other apps an array is returned, by splitting a string on the comma separator
+        info.scopes = results.scope.split(',');
+      } else {
+        // TODO: log a warning
+      }
 
-    // TODO: in workspace apps, there's a whole bunch of very important properties that are not
-    // being passed to the verification callback
-    // installer_user, authorizing_user, app_id, app_user_id
+      // TODO: in workspace apps, there's a whole bunch of very important properties that are not
+      // being passed to the verification callback
+      // installer_user, authorizing_user, app_id, app_user_id
 
-    // Attach info related to bot user
-    if (results.bot) {
-      info.bot = {
-        user_id: results.bot.bot_user_id,
-        access_token: results.bot.bot_access_token,
-        // TODO: bot_id?
-      };
-    }
+      // Attach info related to bot user
+      if (results.bot) {
+        info.bot = {
+          user_id: results.bot.bot_user_id,
+          access_token: results.bot.bot_access_token,
+          // TODO: bot_id?
+        };
+      }
 
-    // Attach info related to incoming webhook
-    if (results.incoming_webhook) {
-      info.incoming_webhook = results.incoming_webhook;
-    }
+      // Attach info related to incoming webhook
+      if (results.incoming_webhook) {
+        info.incoming_webhook = results.incoming_webhook;
+      }
 
-    // Invoke the verify callback using the preference for having the req passed or not
-    if (!passReqToCallback) {
-      const verifyWithoutReq: SlackStrategyVerifyCallback = verify as SlackStrategyVerifyCallback;
-      verifyWithoutReq(info, verified);
-    } else {
-      const verifyWithReq: SlackStrategyVerifyCallbackWithRequest = verify as SlackStrategyVerifyCallbackWithRequest;
-      verifyWithReq(req, info, verified);
-    }
+      // Invoke the verify callback using the preference for having the req passed or not
+      if (!passReqToCallback) {
+        const verifyWithoutReq: SlackStrategyVerifyCallback = verify as SlackStrategyVerifyCallback;
+        verifyWithoutReq(info, verified);
+      } else {
+        const verifyWithReq: SlackStrategyVerifyCallbackWithRequest = verify as SlackStrategyVerifyCallbackWithRequest;
+        verifyWithReq(req, info, verified);
+      }
+    });
   };
+}
+
+function slackGet(url: string, data: any, headers: OutgoingHttpHeaders = {}): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const req = get(`${url}?${qsStringify(data)}`, { headers }, (res: IncomingMessage) => {
+      let body: any = '';
+
+      if (res.statusCode !== 200) {
+        reject(new Error(res.statusMessage));
+      }
+
+      res.setEncoding('utf8');
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          body = JSON.parse(body);
+        } catch (error) {
+          reject(error);
+        }
+
+        if (!body.ok) {
+          reject(new Error(body.error));
+        }
+
+        resolve(body);
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+  });
 }
 
 /**
