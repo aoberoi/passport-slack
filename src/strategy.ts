@@ -336,7 +336,7 @@ function wrapVerify(
         user: {
           // will be undefined for user-token apps that don't fetch the profile
           id: results.installer_user ? results.installer_user.user_id : (profile && profile.user && profile.user.id),
-          name: profile !== undefined && profile.user !== undefined ? profile.user.id : undefined,
+          name: profile !== undefined && profile.user !== undefined ? profile.user.name : undefined,
         },
         team: {
           id: results.team_id || (results.team && results.team.id),
