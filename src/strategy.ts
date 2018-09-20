@@ -1,6 +1,7 @@
 import { OutgoingHttpHeaders, IncomingMessage } from 'http';
 import { get } from 'https';
 import { stringify as qsStringify } from 'querystring';
+import { parse as urlParse } from 'url';
 import { Request } from 'express'; // tslint:disable-line:no-implicit-dependencies
 import OAuth2Strategy, { VerifyCallback } from 'passport-oauth2'; // tslint:disable-line:import-name
 import objectEntries from 'object.entries';
@@ -399,7 +400,9 @@ function wrapVerify(
 
 function slackGet(url: string, data: any, headers: OutgoingHttpHeaders = {}): Promise<any> {
   return new Promise((resolve, reject) => {
-    const req = get(`${url}?${qsStringify(data)}`, { headers }, (res: IncomingMessage) => {
+    const fullUrl = `${url}?${qsStringify(data)}`;
+    const urlObj = urlParse(fullUrl);
+    const req = get(Object.assign({ headers }, urlObj), (res: IncomingMessage) => {
       let body: any = '';
 
       if (res.statusCode !== 200) {
