@@ -323,7 +323,7 @@ function wrapVerify(
       });
     });
     skipProfilePromise.then((skip: boolean) => {
-      if (!skip && profile !== undefined) {
+      if (profile === undefined && !skip) {
         return slackGet(profileURL, { token: accessToken }, {
           'X-Slack-User': results.installer_user && results.installer_user.user_id,
         });
