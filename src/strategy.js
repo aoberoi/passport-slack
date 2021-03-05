@@ -152,7 +152,7 @@ class SlackStrategy extends OAuth2Strategy {
    * @param {Function} done
    */
   userProfile(accessToken, done) {
-    needle.request('get', this.slackAuthOptions.profileURL, { token: accessToken }, (error, response, body) => {
+    needle.request('post', this.slackAuthOptions.profileURL, { token: accessToken }, (error, response, body) => {
       // TODO: better errors
       if (error) {
         done(error);
